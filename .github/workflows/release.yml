@@ -21,7 +21,10 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-26
+    # 签名、公证需要 macOS：celados 自托管 Mac（xcode-27 即 macOS 27 SDK）。
+    # checkout 保持默认的干净工作区，发布产物不复用旧的编译结果。
+    runs-on: [self-hosted, macOS, ARM64, xcode-27]
+    timeout-minutes: 60
     outputs:
       ready: ${{ steps.secrets.outputs.ready }}
     steps:
@@ -92,9 +95,20 @@ jobs:
   publish-cdn:
     needs: release
     if: github.event_name == 'push' && needs.release.outputs.ready == 'true'
-    runs-on: ubuntu-latest
+    runs-on: celados-linux-light
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      # The celados-linux image has no AWS CLI (GitHub-hosted images do).
+      - name: Install AWS CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/awscli.zip" "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip"
+          unzip -q "$RUNNER_TEMP/awscli.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/aws/install" --install-dir "$RUNNER_TEMP/aws-cli" --bin-dir "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/aws" --version
 
       - name: Check R2 secrets
         id: r2
