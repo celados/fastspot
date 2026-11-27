@@ -7,10 +7,23 @@ on:
 
 jobs:
   build:
-    # 需要 macOS 26 SDK（系统翻译 Translation API）
-    runs-on: macos-26
+    # 需要 macOS 26+ SDK（系统翻译 Translation API）。
+    # 来自 fork 的 PR 是不受信任的代码，留在 GitHub 托管的 macos-26；
+    # 其余运行在 celados 自托管 Mac（xcode-27 即 macOS 27 SDK）。
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'macos-26' || fromJSON('["self-hosted","macOS","ARM64","xcode-27"]') }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 自托管 Mac 是常驻机器：保留 .build/ 做增量编译（托管 VM 上无影响）
+          clean: false
+
+      - name: Prepare persistent workspace
+        run: |
+          # 编译产物没人回收：超过 20 GiB 就清空，代价是一次冷编译
+          sz=$(du -sg .build 2>/dev/null | cut -f1 || echo 0)
+          if [ "${sz:-0}" -gt 20 ]; then rm -rf .build; fi
+          rm -rf build Spotcat-unsigned.zip
 
       - name: Toolchain
         run: |
